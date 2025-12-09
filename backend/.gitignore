@@ -1,6 +1,7 @@
 __pycache__/
 venv/
 migrations/
+instance/
 node_modules/
 datasets/
 build/

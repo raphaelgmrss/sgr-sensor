@@ -3,7 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_mail import Mail
 from flask_cors import CORS
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 
 import src.config as config
 
@@ -14,9 +14,7 @@ migrate = Migrate(app, db)
 cors = CORS(app)
 mail = Mail(app)
 
-engine = {
-    "api": create_engine(config.SQLALCHEMY_DATABASE_URI),
-}
+engine = create_engine(config.SQLALCHEMY_DATABASE_URI)
 
 from src.routes.auth_routes import auth_bp
 from src.routes.user_routes import user_bp

@@ -5,17 +5,13 @@ import time
 from flask_marshmallow import Marshmallow
 import numpy as np
 import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
+import torch
 from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 
-from src import app, db, engine, config
-# from src import app, db, engine, config, r
-# from src.utils import (
-#     torch,
-#     Repeater,
-#     MinMaxScaler,
-#     device,
-# )
+from src import app, db, text, config
+
 
 ma = Marshmallow()
 
@@ -26,45 +22,24 @@ class Sensor(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
     description = db.Column(db.String)
+    sampling_period = db.Column(db.Integer, default=1)
     input_size = db.Column(db.Integer)
     output_size = db.Column(db.Integer)
-    sampling_period = db.Column(db.Integer, default=1)
     model_path = db.Column(db.String)
     created_date = db.Column(db.DateTime, default=datetime.now)
-    signals = db.relationship(
-        "Signal", backref="sensor", lazy=True, cascade="all,delete"
-    )
+    # signals = db.relationship(
+    #     "Signal", backref="sensor", lazy=True, cascade="all,delete"
+    # )
 
     def __init__(
-        self, name, description, input_size, output_size, sampling_period, model_path
+        self, name, description, sampling_period, input_size, output_size, model_path
     ):
         self.name = name
         self.description = description
+        self.sampling_period = sampling_period
         self.input_size = input_size
         self.output_size = output_size
-        self.sampling_period = sampling_period
-        self.model_path = model_path
-
-    # def get_fields(self, signals, kind="id"):
-    #     x_columns = []
-    #     y_columns = []
-
-    #     for signal in signals:
-    #         if kind == "id":
-    #             column = "signal_{}".format(signal.id)
-    #         elif kind == "name":
-    #             column = signal.name
-    #         elif kind == "description":
-    #             column = signal.description
-
-    #         if signal.group == "input":
-    #             x_columns.append(column)
-    #         elif signal.group == "output":
-    #             y_columns.append(column)
-
-    #     columns = x_columns + y_columns
-
-    #     return columns, x_columns, y_columns
+        self.model_path = "../../../database/{}".format(model_path)
 
     def clock(self, clock_event, kill_event):
         while True:
@@ -77,54 +52,26 @@ class Sensor(db.Model):
                 clock_event.clear()
                 break
 
-    def receive(self, signals, input_queue, clock_event):
-        with app.app_context():
-            _, x_columns, _ = self.get_fields(signals)
-
-        query = "select {} from sensor_test_{} order by date_time desc limit(1)".format(
-            ", ".join(x_columns), self.id
-        )
-
+    def receive(self, input_queue, clock_event):
         while True:
             clock_event.wait()
-            sensor_mode = r.hget("sensor_{}".format(self.id), "mode")
-            readings = r.mget(x_columns)
 
-            if sensor_mode == b"0":
-                x = [float(value) for value in readings]
-                df_input = (
-                    pd.DataFrame(
-                        [[datetime.utcnow().isoformat()] + x],
-                        columns=["date_time"] + x_columns,
+            with app.app_context():
+                signals = (
+                    db.session.execute(
+                        text("SELECT * FROM signal where id={}".format(self.id))
                     )
-                    .set_index("date_time")
-                    .astype("float")
+                    .mappings()
+                    .all()
                 )
 
-            elif sensor_mode == b"1":
-                x = (
-                    pd.read_sql(
-                        query,
-                        con=engine["test"],
-                    )
-                    .values.tolist()
-                    .pop()
-                )
-                df_input = (
-                    pd.DataFrame(
-                        [[datetime.utcnow().isoformat()] + x],
-                        columns=["date_time"] + x_columns,
-                    )
-                    .set_index("date_time")
-                    .astype("float")
-                )
+                x = {"timestamp": datetime.now().isoformat(), "values": []}
+                for signal in signals:
+                    x["values"].append(signal.setpoint)
 
-            input_queue.put(df_input)
+            input_queue.put(x)
 
-            if r.hget("sensor_{}".format(self.id), "state") == b"0":
-                break
-
-    def process(self, build, signals, input_queue, output_queue):
+    def process(self, signals, input_queue, output_queue):
         with app.app_context():
             build = self.builds[-1]
             columns, x_columns, _ = self.get_fields(signals)
@@ -247,14 +194,14 @@ class Sensor(db.Model):
         self.client.close()
 
 
-class SensorSchema(ma.Schema):
+class SensorSchema(ma.SQLAlchemySchema):
     class Meta:
-        fields = (
-            "id",
-            "name",
-            "description",
-            "input_size",
-            "output_size",
-            "sampling_period",
-            "created_date",
-        )
+        model = Sensor
+
+    id = ma.auto_field()
+    name = ma.auto_field()
+    description = ma.auto_field()
+    sampling_period = ma.auto_field()
+    input_size = ma.auto_field()
+    output_size = ma.auto_field()
+    created_date = ma.auto_field()

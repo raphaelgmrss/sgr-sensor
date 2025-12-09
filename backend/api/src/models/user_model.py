@@ -40,13 +40,13 @@ class User(db.Model):
             return False
 
 
-class UserSchema(ma.Schema):
+class UserSchema(ma.SQLAlchemySchema):
     class Meta:
-        fields = (
-            "id",
-            "name",
-            "last_name",
-            "email",
-            "role",
-            "created_date",
-        )
+        model = User
+
+    id = ma.auto_field()
+    name = ma.auto_field()
+    last_name = ma.auto_field()
+    email = ma.auto_field()
+    role = ma.auto_field()
+    created_date = ma.auto_field()

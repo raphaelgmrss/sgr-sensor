@@ -1,7 +1,6 @@
 from flask import request, jsonify
 from src import db
 from src.models.signal_model import Signal, SignalSchema
-from src.utils import Generator
 
 
 def create():
@@ -69,29 +68,6 @@ def delete_all():
     try:
         Signal.query.delete()
         db.session.commit()
-        res = {"status": "success", "data": None}
-        return jsonify(res), 200
-    except Exception as err:
-        res = {"status": "error", "message": repr(err)}
-        return jsonify(res), 500
-
-
-def get_value(signal_id):
-    try:
-        value = r.get("signal_{}".format(signal_id))
-
-        res = {"status": "success", "data": {"value": float(value)}}
-        return jsonify(res), 200
-    except Exception as err:
-        res = {"status": "error", "message": repr(err)}
-        return jsonify(res), 500
-
-
-def set_value(signal_id):
-    try:
-        data = request.json
-        r.set("signal_{}".format(signal_id), float(data["value"]))
-
         res = {"status": "success", "data": None}
         return jsonify(res), 200
     except Exception as err:
