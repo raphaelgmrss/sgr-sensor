@@ -1,4 +1,3 @@
-import os
 import uuid
 from datetime import datetime
 import time
@@ -15,6 +14,7 @@ from src import app, db, text, config
 
 
 ma = Marshmallow()
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 class Sensor(db.Model):
@@ -40,6 +40,23 @@ class Sensor(db.Model):
         self.output_size = output_size
         self.model_path = "../database/{}.pt".format(model_path)
 
+    def get_fields(self, signals):
+        x_columns = []
+        y_columns = []
+        columns = None
+
+        for signal in signals:
+            column = "signal_{}".format(signal.id)
+
+            if signal.group == "input":
+                x_columns.append(column)
+            elif signal.group == "output":
+                y_columns.append(column)
+
+        columns = x_columns + y_columns
+
+        return columns, x_columns, y_columns
+
     def clock(self, clock_event, kill_event):
         while True:
             clock_event.set()
@@ -52,25 +69,36 @@ class Sensor(db.Model):
                 break
 
     def receive(self, signals, input_queue, clock_event):
+        with app.app_context():
+            _, x_columns, _ = self.get_fields(signals)
+
         while True:
             clock_event.wait()
 
+            data = [datetime.now().isoformat()]
             with app.app_context():
-                x = {
-                    "date_time": datetime.now().isoformat(),
-                    "values": [signal.setpoint for signal in signals],
-                }
+                for signal in signals:
+                    if signal.group == "input":
+                        data.append(signal.setpoint)
 
-            input_queue.put(x)
+            df_input = (
+                pd.DataFrame(
+                    [data],
+                    columns=["date_time"] + x_columns,
+                )
+                .set_index("date_time")
+                .astype("float")
+            )
 
-            if self.state == False:
+            input_queue.put(df_input)
+
+            if self.state == True:
                 break
 
     def process(self, signals, input_queue, output_queue):
-        # with app.app_context():
-
-        repeater = torch.jit.load(self.model_path, map_location="cpu")
-        # scripted_model = torch.jit.script(self.model_path)
+        repeater = torch.jit.load(self.model_path).to(device)
+        with app.app_context():
+            columns, x_columns, y_columns = self.get_fields(signals)
 
         feature_range = (-1, 1)
 
@@ -92,11 +120,12 @@ class Sensor(db.Model):
         y_scaler.n_features_in_ = repeater.y_n_features_in_
         y_scaler.n_samples_seen_ = repeater.y_n_samples_seen_
 
-        x_test = pd.DataFrame(
-            data=np.full((self.lag, self.input_size), 0), columns=x_columns
+        x = pd.DataFrame(
+            data=np.full((repeater.lag, self.input_size), 0), columns=x_columns
         )
-        y = np.zeros((self.lag, self.output_size))
-        y = torch.FloatTensor(np.expand_dims(y, axis=0))
+        y_scaled = torch.FloatTensor(
+            np.expand_dims(np.zeros((repeater.lag, self.output_size)), axis=0)
+        )
 
         test_period = []
         while True:
@@ -104,32 +133,35 @@ class Sensor(db.Model):
                 start = time.time()
 
                 x_data = input_queue.get()
-                x_test = pd.concat(
-                    [x_test, x_data[x_columns]], join="outer", axis=0
-                ).iloc[-self.lag :, :]
-                x_test_scaled = x_scaler.transform(x_test.to_numpy())
-                x = torch.FloatTensor(np.expand_dims(x_test_scaled, axis=0))
-                z = repeater.forward(x, y)
-                y = torch.cat((y, torch.unsqueeze(z[:, -1, :], dim=0)), dim=1)[
-                    :, -self.lag :, :
+                x = pd.concat([x, x_data[x_columns]], join="outer", axis=0).iloc[
+                    -repeater.lag :, :
                 ]
-                y_test_scaled = np.squeeze(y.cpu().numpy(), axis=0)
-                y_test = y_scaler.inverse_transform(y_test_scaled)
+                x_scaled = x_scaler.transform(x.to_numpy())
+                x_scaled = torch.FloatTensor(np.expand_dims(x_scaled, axis=0))
+                z = repeater.forward(x_scaled, y_scaled)
+                y_scaled = torch.cat(
+                    (y_scaled, torch.unsqueeze(z[:, -1, :], dim=0)), dim=1
+                )[:, -repeater.lag :, :]
+                y = y_scaler.inverse_transform(
+                    np.squeeze(y_scaled.cpu().detach().numpy(), axis=0)
+                )
 
-                df_run = pd.DataFrame(
+                df_output = pd.DataFrame(
                     np.hstack(
                         (
                             x_data.values[-1:, :],
-                            y_test[-1:, :],
+                            y[-1:, :],
                         )
                     ),
                     columns=columns,
                 )
-                df_run.index = pd.to_datetime(x_data.index)
-                output_queue.put(df_run)
+                df_output.index = pd.to_datetime(x_data.index)
+                output_queue.put(df_output)
 
                 end = time.time()
                 test_period.append(end - start)
+                # print(end - start)
+                print(df_output)
 
     #         if r.hget("sensor_{}".format(self.id), "state") == b"0":
     #             break

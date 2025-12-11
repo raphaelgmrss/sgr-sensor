@@ -104,6 +104,7 @@ def start(sensor_id):
     try:
         sensor = Sensor.query.get(sensor_id)
         signals = Signal.query.filter_by(sensor_id=sensor_id).order_by(Signal.id.asc())
+        signals = [signal for signal in signals]
 
         print("Running sensor {}...".format(sensor.id))
 
