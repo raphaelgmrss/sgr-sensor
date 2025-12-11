@@ -1,0 +1,14 @@
+__pycache__/
+venv/
+migrations/
+instance/
+node_modules/
+datasets/
+build/
+libtorch/
+run.build/
+run.dist/
+run.onefile-build/
+build*/
+# database/
+# models/
