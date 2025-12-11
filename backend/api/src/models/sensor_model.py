@@ -1,3 +1,4 @@
+import os
 import uuid
 from datetime import datetime
 import time
@@ -26,10 +27,8 @@ class Sensor(db.Model):
     input_size = db.Column(db.Integer)
     output_size = db.Column(db.Integer)
     model_path = db.Column(db.String)
+    state = db.Column(db.Boolean, default=False)
     created_date = db.Column(db.DateTime, default=datetime.now)
-    # signals = db.relationship(
-    #     "Signal", backref="sensor", lazy=True, cascade="all,delete"
-    # )
 
     def __init__(
         self, name, description, sampling_period, input_size, output_size, model_path
@@ -39,7 +38,7 @@ class Sensor(db.Model):
         self.sampling_period = sampling_period
         self.input_size = input_size
         self.output_size = output_size
-        self.model_path = "../../../database/{}".format(model_path)
+        self.model_path = "../database/{}.pt".format(model_path)
 
     def clock(self, clock_event, kill_event):
         while True:
@@ -52,112 +51,88 @@ class Sensor(db.Model):
                 clock_event.clear()
                 break
 
-    def receive(self, input_queue, clock_event):
+    def receive(self, signals, input_queue, clock_event):
         while True:
             clock_event.wait()
 
             with app.app_context():
-                signals = (
-                    db.session.execute(
-                        text("SELECT * FROM signal where id={}".format(self.id))
-                    )
-                    .mappings()
-                    .all()
-                )
-
-                x = {"timestamp": datetime.now().isoformat(), "values": []}
-                for signal in signals:
-                    x["values"].append(signal.setpoint)
+                x = {
+                    "date_time": datetime.now().isoformat(),
+                    "values": [signal.setpoint for signal in signals],
+                }
 
             input_queue.put(x)
 
+            if self.state == False:
+                break
+
     def process(self, signals, input_queue, output_queue):
-        with app.app_context():
-            build = self.builds[-1]
-            columns, x_columns, _ = self.get_fields(signals)
+        # with app.app_context():
 
-        config = {
-            "input_size": self.input_size + self.output_size,
-            "output_size": self.output_size,
-            "hidden_size": self.hidden_size,
-            "num_layers": self.num_layers,
-            "learning_rate": self.learning_rate,
-            "dropout": self.dropout,
-            "lag": self.lag,
-            "epochs": self.epochs,
-        }
-
-        repeater = Repeater(**config).to(device)
-
-        repeater.load_state_dict(
-            torch.load(self.model, map_location=torch.device(device))
-        )
-        repeater.eval()
+        repeater = torch.jit.load(self.model_path, map_location="cpu")
+        # scripted_model = torch.jit.script(self.model_path)
 
         feature_range = (-1, 1)
 
         x_scaler = MinMaxScaler(feature_range=feature_range)
-        x_scaler.min_ = build.x_scaler_min
-        x_scaler.scale_ = build.x_scaler_scale
-        x_scaler.data_min_ = build.x_scaler_data_min
-        x_scaler.data_max_ = build.x_scaler_data_max
-        x_scaler.data_range_ = build.x_scaler_data_range
-        x_scaler.n_features_in_ = build.x_scaler_n_features_in
-        x_scaler.n_samples_seen_ = build.x_scaler_n_samples_seen
+        x_scaler.min_ = repeater.x_min_
+        x_scaler.scale_ = repeater.x_scale_
+        x_scaler.data_min_ = repeater.x_data_min_
+        x_scaler.data_max_ = repeater.x_data_max_
+        x_scaler.data_range_ = repeater.x_data_range_
+        x_scaler.n_features_in_ = repeater.x_n_features_in_
+        x_scaler.n_samples_seen_ = repeater.x_n_samples_seen_
 
         y_scaler = MinMaxScaler(feature_range=feature_range)
-        y_scaler.min_ = build.y_scaler_min
-        y_scaler.scale_ = build.y_scaler_scale
-        y_scaler.data_min_ = build.y_scaler_data_min
-        y_scaler.data_max_ = build.y_scaler_data_max
-        y_scaler.data_range_ = build.y_scaler_data_range
-        y_scaler.n_features_in_ = build.y_scaler_n_features_in
-        y_scaler.n_samples_seen_ = build.y_scaler_n_samples_seen
+        y_scaler.min_ = repeater.y_min_
+        y_scaler.scale_ = repeater.y_scale_
+        y_scaler.data_min_ = repeater.y_data_min_
+        y_scaler.data_max_ = repeater.y_data_max_
+        y_scaler.data_range_ = repeater.y_data_range_
+        y_scaler.n_features_in_ = repeater.y_n_features_in_
+        y_scaler.n_samples_seen_ = repeater.y_n_samples_seen_
 
         x_test = pd.DataFrame(
             data=np.full((self.lag, self.input_size), 0), columns=x_columns
         )
         y = np.zeros((self.lag, self.output_size))
-        y = torch.FloatTensor(np.expand_dims(y, axis=0)).to(device)
+        y = torch.FloatTensor(np.expand_dims(y, axis=0))
 
-        # test_period = []
-        with torch.no_grad():
-            while True:
-                if len(input_queue.queue) > 0:
-                    # start = time.time()
+        test_period = []
+        while True:
+            if len(input_queue.queue) > 0:
+                start = time.time()
 
-                    x_data = input_queue.get()
-                    x_test = pd.concat(
-                        [x_test, x_data[x_columns]], join="outer", axis=0
-                    ).iloc[-self.lag :, :]
-                    x_test_scaled = x_scaler.transform(x_test.to_numpy())
-                    x = torch.FloatTensor(np.expand_dims(x_test_scaled, axis=0)).to(
-                        device
-                    )
-                    z = repeater.forward(x, y)
-                    y = torch.cat((y, torch.unsqueeze(z[:, -1, :], dim=0)), dim=1)[
-                        :, -self.lag :, :
-                    ]
-                    y_test_scaled = np.squeeze(y.cpu().numpy(), axis=0)
-                    y_test = y_scaler.inverse_transform(y_test_scaled)
+                x_data = input_queue.get()
+                x_test = pd.concat(
+                    [x_test, x_data[x_columns]], join="outer", axis=0
+                ).iloc[-self.lag :, :]
+                x_test_scaled = x_scaler.transform(x_test.to_numpy())
+                x = torch.FloatTensor(np.expand_dims(x_test_scaled, axis=0))
+                z = repeater.forward(x, y)
+                y = torch.cat((y, torch.unsqueeze(z[:, -1, :], dim=0)), dim=1)[
+                    :, -self.lag :, :
+                ]
+                y_test_scaled = np.squeeze(y.cpu().numpy(), axis=0)
+                y_test = y_scaler.inverse_transform(y_test_scaled)
 
-                    df_run = pd.DataFrame(
-                        np.hstack(
-                            (
-                                x_data.values[-1:, :],
-                                y_test[-1:, :],
-                            )
-                        ),
-                        columns=columns,
-                    )
-                    df_run.index = pd.to_datetime(x_data.index)
-                    output_queue.put(df_run)
+                df_run = pd.DataFrame(
+                    np.hstack(
+                        (
+                            x_data.values[-1:, :],
+                            y_test[-1:, :],
+                        )
+                    ),
+                    columns=columns,
+                )
+                df_run.index = pd.to_datetime(x_data.index)
+                output_queue.put(df_run)
 
-                    # end = time.time()
-                    # test_period.append(end - start)
+                end = time.time()
+                test_period.append(end - start)
 
-                if r.hget("sensor_{}".format(self.id), "state") == b"0":
-                    break
+    #         if r.hget("sensor_{}".format(self.id), "state") == b"0":
+    #             break
 
     def transmit(self, signals, output_queue, org):
         self.client = InfluxDBClient(
@@ -204,4 +179,5 @@ class SensorSchema(ma.SQLAlchemySchema):
     sampling_period = ma.auto_field()
     input_size = ma.auto_field()
     output_size = ma.auto_field()
+    state = ma.auto_field()
     created_date = ma.auto_field()

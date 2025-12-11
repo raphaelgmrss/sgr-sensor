@@ -129,21 +129,22 @@ def start(sensor_id):
         receive_thread = threading.Thread(
             target=sensor.receive,
             args=(
+                signals,
                 input_queue,
                 clock_event,
             ),
         )
         receive_thread.start()
 
-        # run_thread = threading.Thread(
-        #     target=sensor.process,
-        #     args=(
-        #         signals,
-        #         input_queue,
-        #         output_queue,
-        #     ),
-        # )
-        # run_thread.start()
+        process_thread = threading.Thread(
+            target=sensor.process,
+            args=(
+                signals,
+                input_queue,
+                output_queue,
+            ),
+        )
+        process_thread.start()
 
         # transmit_thread = threading.Thread(
         #     target=sensor.transmit,

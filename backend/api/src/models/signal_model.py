@@ -13,6 +13,7 @@ class Signal(db.Model):
     name = db.Column(db.String)
     description = db.Column(db.String)
     unit = db.Column(db.String)
+    group = db.Column(db.String)
     setpoint = db.Column(db.Float)
     setpoint_min = db.Column(db.Float)
     setpoint_max = db.Column(db.Float)
@@ -26,6 +27,7 @@ class Signal(db.Model):
         name,
         description,
         unit,
+        group,
         setpoint,
         setpoint_min,
         setpoint_max,
@@ -35,6 +37,7 @@ class Signal(db.Model):
         self.name = name
         self.description = description
         self.unit = unit
+        self.group = group
         self.setpoint = setpoint
         self.setpoint_min = setpoint_min
         self.setpoint_max = setpoint_max
@@ -50,6 +53,7 @@ class SignalSchema(ma.SQLAlchemySchema):
     name = ma.auto_field()
     description = ma.auto_field()
     unit = ma.auto_field()
+    group = ma.auto_field()
     setpoint = ma.auto_field()
     setpoint_min = ma.auto_field()
     setpoint_max = ma.auto_field()
