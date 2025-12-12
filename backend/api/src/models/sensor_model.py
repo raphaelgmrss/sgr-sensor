@@ -26,18 +26,27 @@ class Sensor(db.Model):
     sampling_period = db.Column(db.Integer, default=1)
     input_size = db.Column(db.Integer)
     output_size = db.Column(db.Integer)
+    buffer = db.Column(db.Integer)
     model_path = db.Column(db.String)
     state = db.Column(db.Boolean, default=False)
     created_date = db.Column(db.DateTime, default=datetime.now)
 
     def __init__(
-        self, name, description, sampling_period, input_size, output_size, model_path
+        self,
+        name,
+        description,
+        sampling_period,
+        input_size,
+        output_size,
+        buffer,
+        model_path,
     ):
         self.name = name
         self.description = description
         self.sampling_period = sampling_period
         self.input_size = input_size
         self.output_size = output_size
+        self.buffer = buffer
         self.model_path = "../database/{}.pt".format(model_path)
 
     def get_fields(self, signals):
@@ -68,8 +77,12 @@ class Sensor(db.Model):
                 clock_event.clear()
                 break
 
-    def receive(self, signals, input_queue, clock_event):
+    def receive(self, Signal, input_queue, clock_event):
+
         with app.app_context():
+            signals = Signal.query.filter_by(sensor_id=self.id).order_by(
+                Signal.id.asc()
+            )
             _, x_columns, _ = self.get_fields(signals)
 
         while True:
@@ -92,13 +105,17 @@ class Sensor(db.Model):
 
             input_queue.put(df_input)
 
-            if self.state == True:
+            if not self.state:
                 break
 
-    def process(self, signals, input_queue, output_queue):
+    def process(self, Signal, input_queue, output_queue, clock_event):
         repeater = torch.jit.load(self.model_path).to(device)
+
         with app.app_context():
-            columns, x_columns, y_columns = self.get_fields(signals)
+            signals = Signal.query.filter_by(sensor_id=self.id).order_by(
+                Signal.id.asc()
+            )
+            columns, x_columns, _ = self.get_fields(signals)
 
         feature_range = (-1, 1)
 
@@ -127,10 +144,9 @@ class Sensor(db.Model):
             np.expand_dims(np.zeros((repeater.lag, self.output_size)), axis=0)
         )
 
-        test_period = []
         while True:
+            clock_event.wait()
             if len(input_queue.queue) > 0:
-                start = time.time()
 
                 x_data = input_queue.get()
                 x = pd.concat([x, x_data[x_columns]], join="outer", axis=0).iloc[
@@ -158,47 +174,30 @@ class Sensor(db.Model):
                 df_output.index = pd.to_datetime(x_data.index)
                 output_queue.put(df_output)
 
-                end = time.time()
-                test_period.append(end - start)
-                # print(end - start)
-                print(df_output)
-
-    #         if r.hget("sensor_{}".format(self.id), "state") == b"0":
-    #             break
-
-    def transmit(self, signals, output_queue, org):
-        self.client = InfluxDBClient(
-            url=config.INFLUXDB_URL,
-            token=config.INFLUXDB_TOKEN,
-            org=org,
-        )
-        write_api = self.client.write_api(write_options=SYNCHRONOUS)
-
-        with app.app_context():
-            columns, _, _ = self.get_fields(signals, "description")
-        measurement = self.description
-        tags = {"company_{}".format(self.company_id): "sensor_{}".format(self.id)}
-
-        while True:
-            if len(output_queue.queue) > 0:
-                df = output_queue.get()
-                df.columns = columns
-                data = {
-                    "measurement": measurement,
-                    "tags": tags,
-                    "time": str(df.index.values[0]),
-                    "fields": df.to_dict("records").pop(),
-                }
-
-                point = Point.from_dict(data)
-                write_api.write(bucket=config.INFLUXDB_BUCKET, record=point)
-
-                # print("sensor_{}: {}".format(self.id, data["time"]))
-
-            if r.hget("sensor_{}".format(self.id), "state") == b"0":
+            if not self.state:
                 break
 
-        self.client.close()
+    def transmit(self, Signal, output_queue, clock_event):
+        with app.app_context():
+            signals = Signal.query.filter_by(sensor_id=self.id).order_by(
+                Signal.id.asc()
+            )
+            columns, _, _ = self.get_fields(signals)
+
+        df_data = pd.DataFrame(
+            data=np.full((self.buffer, len(columns)), 0), columns=columns
+        )
+        while True:
+            clock_event.wait()
+            if len(output_queue.queue) > 0:
+                df_output = output_queue.get()
+                df_data = pd.concat([df_data, df_output], axis=0)
+                if len(df_data) > self.buffer:
+                    df_data = df_data.iloc[-self.buffer :]
+                print(df_data)
+
+            if not self.state:
+                break
 
 
 class SensorSchema(ma.SQLAlchemySchema):
@@ -211,5 +210,6 @@ class SensorSchema(ma.SQLAlchemySchema):
     sampling_period = ma.auto_field()
     input_size = ma.auto_field()
     output_size = ma.auto_field()
+    buffer = ma.auto_field()
     state = ma.auto_field()
     created_date = ma.auto_field()

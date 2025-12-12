@@ -104,16 +104,9 @@ def start(sensor_id):
     try:
         sensor = Sensor.query.get(sensor_id)
         signals = Signal.query.filter_by(sensor_id=sensor_id).order_by(Signal.id.asc())
-        signals = [signal for signal in signals]
+        sensor.state = True
 
         print("Running sensor {}...".format(sensor.id))
-
-        # x = {"timestamp": datetime.now().isoformat(), "values": []}
-        # for signal in sensor.signals:
-        #     print(signal)
-        #     x["values"].append(signal.setpoint)
-
-        # print(x)
 
         input_queue = Queue()
         output_queue = Queue()
@@ -130,7 +123,7 @@ def start(sensor_id):
         receive_thread = threading.Thread(
             target=sensor.receive,
             args=(
-                signals,
+                Signal,
                 input_queue,
                 clock_event,
             ),
@@ -139,22 +132,15 @@ def start(sensor_id):
 
         process_thread = threading.Thread(
             target=sensor.process,
-            args=(
-                signals,
-                input_queue,
-                output_queue,
-            ),
+            args=(Signal, input_queue, output_queue, clock_event),
         )
         process_thread.start()
 
-        # transmit_thread = threading.Thread(
-        #     target=sensor.transmit,
-        #     args=(
-        #         signals,
-        #         output_queue,
-        #     ),
-        # )
-        # transmit_thread.start()
+        transmit_thread = threading.Thread(
+            target=sensor.transmit,
+            args=(Signal, output_queue, clock_event),
+        )
+        transmit_thread.start()
 
         res = {"status": "success", "data": None}
         return jsonify(res), 202
@@ -165,6 +151,9 @@ def start(sensor_id):
 
 def stop(sensor_id):
     try:
+        sensor = Sensor.query.get(sensor_id)
+        sensor.state = False
+
         kill_event.set()
         time.sleep(1)
         kill_event.clear()
@@ -176,22 +165,40 @@ def stop(sensor_id):
         return jsonify(res), 500
 
 
-# def reset():
-#     try:
-#         sensors = Sensor.query.all()
+def get_state(sensor_id):
+    try:
+        sensor = Sensor.query.get(sensor_id)
 
-#         for sensor in sensors:
-#             r.hset("sensor_{}".format(sensor.id), key="state", value=0)
+        res = {
+            "status": "success",
+            "data": {
+                "sensor_id": sensor_id,
+                "state": sensor.state,
+            },
+        }
+        return jsonify(res), 200
+    except Exception as err:
+        res = {"status": "error", "message": repr(err)}
+        return jsonify(res), 500
 
-#         kill_event.set()
-#         time.sleep(1)
-#         kill_event.clear()
 
-#         res = {"status": "success", "data": None}
-#         return jsonify(res), 200
-#     except Exception as err:
-#         res = {"status": "error", "message": repr(err)}
-#         return jsonify(res), 500
+def set_state(sensor_id, state):
+    try:
+        sensor = Sensor.query.get(sensor_id)
+        sensor.state = state
+        db.session.commit()
+
+        res = {
+            "status": "success",
+            "data": {
+                "sensor_id": sensor_id,
+                "state": sensor.state,
+            },
+        }
+        return jsonify(res), 200
+    except Exception as err:
+        res = {"status": "error", "message": repr(err)}
+        return jsonify(res), 500
 
 
 # def get_data(sensor_id, start_date, end_date):
