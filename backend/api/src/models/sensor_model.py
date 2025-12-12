@@ -7,10 +7,9 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 import torch
-from influxdb_client import InfluxDBClient, Point
-from influxdb_client.client.write_api import SYNCHRONOUS
+from sqlalchemy import create_engine
 
-from src import app, db, text, config
+from src import app, db, engine
 
 
 ma = Marshmallow()
@@ -178,6 +177,8 @@ class Sensor(db.Model):
                 break
 
     def transmit(self, Signal, output_queue, clock_event):
+        engine = create_engine("sqlite:///../database/database.db")
+
         with app.app_context():
             signals = Signal.query.filter_by(sensor_id=self.id).order_by(
                 Signal.id.asc()
@@ -187,6 +188,11 @@ class Sensor(db.Model):
         df_data = pd.DataFrame(
             data=np.full((self.buffer, len(columns)), 0), columns=columns
         )
+        df_data.index = pd.date_range(
+            end=pd.to_datetime("now"), periods=self.buffer, freq="1s"
+        )
+        df_data.to_sql("sensor_data", con=engine, if_exists="replace", index=True)
+
         while True:
             clock_event.wait()
             if len(output_queue.queue) > 0:
@@ -194,7 +200,9 @@ class Sensor(db.Model):
                 df_data = pd.concat([df_data, df_output], axis=0)
                 if len(df_data) > self.buffer:
                     df_data = df_data.iloc[-self.buffer :]
-                print(df_data)
+                df_data.to_sql(
+                    "sensor_data", con=engine, if_exists="replace", index=True
+                )
 
             if not self.state:
                 break
