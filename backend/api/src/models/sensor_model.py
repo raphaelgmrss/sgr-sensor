@@ -178,6 +178,7 @@ class Sensor(db.Model):
 
     def transmit(self, Signal, output_queue, clock_event):
         engine = create_engine("sqlite:///../database/database.db")
+        table = "data"
 
         with app.app_context():
             signals = Signal.query.filter_by(sensor_id=self.id).order_by(
@@ -191,7 +192,10 @@ class Sensor(db.Model):
         df_data.index = pd.date_range(
             end=pd.to_datetime("now"), periods=self.buffer, freq="1s"
         )
-        df_data.to_sql("sensor_data", con=engine, if_exists="replace", index=True)
+        df_data.index.name = "date_time"
+        df_data.to_sql(
+            table, con=engine, if_exists="replace", index=False, index_label="date_time"
+        )
 
         while True:
             clock_event.wait()
@@ -200,9 +204,7 @@ class Sensor(db.Model):
                 df_data = pd.concat([df_data, df_output], axis=0)
                 if len(df_data) > self.buffer:
                     df_data = df_data.iloc[-self.buffer :]
-                df_data.to_sql(
-                    "sensor_data", con=engine, if_exists="replace", index=True
-                )
+                df_data.to_sql(table, con=engine, if_exists="replace", index=True)
 
             if not self.state:
                 break
