@@ -104,7 +104,9 @@ def start(sensor_id):
     try:
         sensor = Sensor.query.get(sensor_id)
         signals = Signal.query.filter_by(sensor_id=sensor_id).order_by(Signal.id.asc())
+
         sensor.state = True
+        db.session.commit()
 
         print("Running sensor {}...".format(sensor.id))
 
@@ -152,7 +154,9 @@ def start(sensor_id):
 def stop(sensor_id):
     try:
         sensor = Sensor.query.get(sensor_id)
+
         sensor.state = False
+        db.session.commit()
 
         kill_event.set()
         time.sleep(1)

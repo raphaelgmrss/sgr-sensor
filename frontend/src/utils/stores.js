@@ -9,4 +9,3 @@ export const platformName = "SGR Sensor";
 // Sensor
 export const sensorId = import.meta.env.SENSOR_ID || 1
 
-export const setpoints = writable([]);

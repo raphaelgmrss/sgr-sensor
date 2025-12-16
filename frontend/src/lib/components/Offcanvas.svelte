@@ -1,44 +1,91 @@
 <script>
-	import { Button, ButtonSet, Slider } from "carbon-components-svelte";
-	import Play from "carbon-icons-svelte/lib/Play.svelte";
-	import Stop from "carbon-icons-svelte/lib/Stop.svelte";
+	import { onMount, onDestroy } from "svelte";
+	let { sensor, signals, opened } = $props();
 
-	let { opened, setpoints, sensorState } = $props();
-	let width = 20;
+	import { Button, Slider } from "carbon-components-svelte";
+
+	import api from "../../utils/api";
+
+	// Data
+	let sensorState = $state();
+
+	// Callbacks
+	// const readSensor = async (id) => {
+	// 	try {
+	// 		const res = await api.get(`/sensor/${id}`);
+	// 		// console.log(res.data);
+	// 		return res.data;
+	// 	} catch (error) {
+	// 		console.log(error);
+	// 	}
+	// };
+	const runSensor = async (id) => {
+		try {
+			const res = await api.get(`/sensor/${id}/start`);
+			return res.data;
+		} catch (error) {
+			console.log(error);
+		}
+	};
+	const stopSensor = async (id) => {
+		try {
+			const res = await api.get(`/sensor/${id}/stop`);
+			return res.data;
+		} catch (error) {
+			console.log(error);
+		}
+	};
+
+	onMount(() => {});
+	onDestroy(() => {});
 </script>
 
-<aside class="offcanvas" style="--w:{width}vw" class:opened>
-	<nav>
-		Setpoints
-		<!-- {#if !sensorState}
-			<Button
-				kind="tertiary"
-				icon={Play}
-				on:click={() => {
-					sensorState = !sensorState;
-				}}
-			>
-				Run
-			</Button>
-		{:else}
-			<Button
-				icon={Stop}
-				kind="danger-tertiary"
-				on:click={() => {
-					sensorState = !sensorState;
-				}}
-			>
-				Stop
-			</Button>
-		{/if} -->
-		{#await setpoints then setpoints}
-			{#each setpoints as setpoint}
-				{#if setpoint.group == "input"}
-					<Slider labelText={setpoint.name} value={0} />
+<aside class="offcanvas" class:opened>
+	{#await sensor then sensor}
+		<nav>
+			<div style="all:revert">
+				{#if !sensorState}
+					<Button
+						size="field"
+						kind="tertiary"
+						on:click={() => {
+							runSensor(sensor.id);
+							sensorState = !sensorState;
+						}}
+					>
+						Run
+					</Button>
+				{:else}
+					<Button
+						size="field"
+						kind="danger-tertiary"
+						on:click={() => {
+							stopSensor(sensor.id);
+							sensorState = !sensorState;
+						}}
+					>
+						Stop
+					</Button>
 				{/if}
-			{/each}
-		{/await}
-	</nav>
+			</div>
+			<br />
+			<!-- Setpoints -->
+			{#await signals then signals}
+				{#each signals as signal}
+					{#if signal.group == "input"}
+						<Slider
+							labelText={`${signal.name} [${signal.unit}]`}
+							min={signal.setpoint_min}
+							max={signal.setpoint_max}
+							step={signal.setpoint_step}
+							fullWidth
+							value={signal.setpoint}
+						/>
+					{/if}
+				{/each}
+			{/await}
+		</nav>
+	{/await}
 </aside>
 
 <style>
@@ -54,7 +101,7 @@
 	}
 
 	.offcanvas.opened {
-		width: var(--w);
+		width: 50vw;
 	}
 
 	nav {
@@ -63,13 +110,4 @@
 		padding: 1.5rem;
 		gap: 1rem;
 	}
-
-	/* nav a {
-		color: #ccc;
-		text-decoration: none;
-	}
-
-	nav a:hover {
-		color: white;
-	} */
 </style>

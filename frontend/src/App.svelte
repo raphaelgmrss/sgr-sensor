@@ -1,7 +1,7 @@
 <script>
   // @ts-nocheck
 
-  import { Router, Route, Link, navigate } from "svelte-routing";
+  import { onMount, onDestroy } from "svelte";
 
   import Base from "./lib/routes/Base.svelte";
   import Login from "./lib/routes/Login.svelte";
@@ -10,19 +10,13 @@
 
   $user = JSON.parse(sessionStorage.getItem("user"));
 
-  // if ($user === null) {
-  //   navigate("/login", { replace: true });
-  // }
+  onMount(() => {});
+  onDestroy(() => {});
 </script>
 
 <!-- {#if $user === null} -->
 {#if false}
-  <Router>
-    <Route path="/"><Login /></Route>
-    <Route path="/login"><Login /></Route>
-  </Router>
+  <Login />
 {:else}
-  <Router>
-    <Route path="/"><Base /></Route>
-  </Router>
+  <Base />
 {/if}
