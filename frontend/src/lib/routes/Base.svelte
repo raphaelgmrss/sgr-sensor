@@ -14,7 +14,8 @@
     import { user, sensorId } from "../../utils/stores";
     import api from "../../utils/api";
 
-    // let { children } = $props();
+    let open = $state(false);
+    const WIDTH = 240;
 
     // Data
     let sensor = $state({});
@@ -23,6 +24,7 @@
     let offcanvas = $state({
         opened: false,
         icon: Menu,
+        width: 25,
     });
 
     // Callbacks
@@ -49,16 +51,33 @@
     sensor = readSensor(sensorId);
     signals = readSignals(sensorId);
 
-    onMount(() => {});
+    onMount(() => {
+        // sensor = readSensor(sensorId);
+        // signals = readSignals(sensorId);
+    });
     onDestroy(() => {});
 </script>
 
 <Navbar />
 
-<div class="content">
-    <Offcanvas bind:sensor bind:signals bind:opened={offcanvas.opened} />
+<div class="layout">
+    <!-- <Offcanvas bind:open width={WIDTH} /> -->
+    {#await sensor then sensor}
+        {#await signals then signals}
+            <Offcanvas
+                {sensor}
+                {signals}
+                bind:opened={offcanvas.opened}
+                width={offcanvas.width}
+            />
+        {/await}
+    {/await}
 
-    <main class="panel">
+    <main
+        class="main"
+        style="--w:{offcanvas.width}vw"
+        class:shifted={offcanvas.opened}
+    >
         <Button
             kind="ghost"
             iconDescription="Setpoints"
@@ -77,13 +96,20 @@
 </div>
 
 <style>
-    .content {
-        display: flex;
+    .layout {
+        position: relative;
         height: calc(100vh - 56px);
     }
 
-    .panel {
-        flex: 1;
-        height: 100vh;
+    .main {
+        height: 100%;
+        padding: 1.5rem;
+
+        transform: translateX(0);
+        transition: transform 0.25s ease;
+    }
+
+    .main.shifted {
+        transform: translateX(var(--w));
     }
 </style>
