@@ -5,10 +5,11 @@
 
 	import { Button, Slider } from "carbon-components-svelte";
 
+	import { user, sensorId, sensorState } from "../../utils/stores";
 	import api from "../../utils/api";
 
 	// Data
-	let sensorState = $state();
+	// let sensorState = $state();
 
 	const runSensor = async (id) => {
 		try {
@@ -38,23 +39,35 @@
 		}
 	};
 
-	onMount(() => {});
+	const getSensorState = async (id) => {
+		try {
+			const res = await api.get(`/sensor/${id}/state`);
+			return res.data;
+		} catch (error) {
+			console.log(error);
+		}
+	};
+
+	onMount(async () => {
+		let res = await getSensorState($sensorId);
+		$sensorState = res.state;
+	});
 	onDestroy(() => {});
 </script>
 
 <aside class="offcanvas" style="--w:{width}vw" class:opened>
 	<nav>
 		<div style="all:revert">
-			{#if !sensorState}
+			{#if !$sensorState}
 				<Button
 					size="field"
 					kind="tertiary"
 					on:click={() => {
 						runSensor(sensor.id);
-						sensorState = !sensorState;
+						$sensorState = !$sensorState;
 					}}
 				>
-					Run
+					Start
 				</Button>
 			{:else}
 				<Button
@@ -62,7 +75,7 @@
 					kind="danger-tertiary"
 					on:click={() => {
 						stopSensor(sensor.id);
-						sensorState = !sensorState;
+						$sensorState = !$sensorState;
 					}}
 				>
 					Stop

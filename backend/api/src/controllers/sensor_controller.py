@@ -124,23 +124,19 @@ def start(sensor_id):
 
         receive_thread = threading.Thread(
             target=sensor.receive,
-            args=(
-                Signal,
-                input_queue,
-                clock_event,
-            ),
+            args=(Signal, input_queue, clock_event, kill_event),
         )
         receive_thread.start()
 
         process_thread = threading.Thread(
             target=sensor.process,
-            args=(Signal, input_queue, output_queue, clock_event),
+            args=(Signal, input_queue, output_queue, clock_event, kill_event),
         )
         process_thread.start()
 
         transmit_thread = threading.Thread(
             target=sensor.transmit,
-            args=(Signal, output_queue, clock_event),
+            args=(Signal, output_queue, clock_event, kill_event),
         )
         transmit_thread.start()
 
@@ -156,6 +152,25 @@ def stop(sensor_id):
         sensor = Sensor.query.get(sensor_id)
 
         sensor.state = False
+        db.session.commit()
+
+        kill_event.set()
+        time.sleep(1)
+        kill_event.clear()
+
+        res = {"status": "success", "data": None}
+        return jsonify(res), 200
+    except Exception as err:
+        res = {"status": "error", "message": repr(err)}
+        return jsonify(res), 500
+
+
+def reset():
+    try:
+        sensors = Sensor.query.all()
+
+        for sensor in sensors:
+            sensor.state = False
         db.session.commit()
 
         kill_event.set()
@@ -306,23 +321,19 @@ def get_points(sensor_id):
             elif signal.group == "output":
                 y_columns.append(column)
 
-        query = """SELECT * FROM data ORDER BY date_time DESC LIMIT 1"""
-        # query = """SELECT * FROM data ORDER BY date_time ASC"""
+        query = """SELECT * FROM (SELECT * FROM data ORDER BY date_time DESC LIMIT ?) AS recent_records ORDER BY date_time ASC;"""
+
+        limit = request.args.get("limit")
 
         result = pd.read_sql(
             query,
             con=engine,
+            params=(limit,),
             parse_dates=["date_time"],
             index_col="date_time",
         )
 
         if not result.empty:
-            # date_time = (
-            #     pd.to_datetime(result.index.values)
-            #     .strftime("%Y-%m-%d %H:%M:%S")
-            #     .tolist()
-            # )
-
             values = []
             for signal in signals:
                 column = "signal_{}".format(signal.id)
@@ -331,13 +342,14 @@ def get_points(sensor_id):
                         "id": signal.id,
                         "name": signal.name,
                         "description": signal.description,
-                        "date_time": pd.to_datetime(result.index.values)
-                        .strftime("%Y-%m-%dT%H:%M:%S")
-                        .tolist().pop(),
-                        "value": np.around(
-                            result[column].values,
-                            decimals=3,
-                        ).tolist().pop(),
+                        "records": np.column_stack(
+                            [
+                                pd.to_datetime(result.index.values).strftime(
+                                    "%Y-%m-%dT%H:%M:%S"
+                                ),
+                                np.around(result[column], decimals=3),
+                            ]
+                        ).tolist(),
                     }
                 )
 

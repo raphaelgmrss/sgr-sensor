@@ -54,7 +54,6 @@
                 data: s.data.map((p) => [p[0], p[1]]),
             }));
 
-            console.log(safeSeries);
             chart.setOption({ series: safeSeries });
         });
 

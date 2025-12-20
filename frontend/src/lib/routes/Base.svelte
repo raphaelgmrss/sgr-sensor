@@ -12,7 +12,7 @@
     import Offcanvas from "../components/Offcanvas.svelte";
     import Chart from "../components/Chart.svelte";
 
-    import { user, sensorId } from "../../utils/stores";
+    import { user, sensorId, sensorState } from "../../utils/stores";
     import api from "../../utils/api";
     import { derived } from "svelte/store";
 
@@ -22,7 +22,13 @@
     let sensor = $state({});
     let signals = $state([]);
     let points = $state([]);
-    let numPoints = 60;
+    let samplingPeriod = 1000;
+    let limit = 60;
+
+    let pointsObj = {};
+    let series = $state([]);
+    let seriesObj = [];
+    let intervalId = null;
 
     let offcanvas = $state({
         opened: false,
@@ -53,7 +59,7 @@
 
     const getPoints = async (id) => {
         try {
-            const res = await api.get(`/sensor/${id}/points`);
+            const res = await api.get(`/sensor/${id}/points?limit=${limit}`);
             // console.log(res.data);
             return res.data;
         } catch (error) {
@@ -61,17 +67,49 @@
         }
     };
 
-    let pointsObj = {};
-    let series = $state([]);
-    let seriesObj = [];
-    let interval = null;
+    function startInterval() {
+        if (intervalId === null) {
+            intervalId = setInterval(async () => {
+                points = await getPoints($sensorId);
+
+                seriesObj = [];
+                if (typeof points !== "undefined") {
+                    for (const point of points) {
+                        seriesObj.push({
+                            name: point.name,
+                            type: "line",
+                            showSymbol: false,
+                            smooth: true,
+                            data: point.records,
+                        });
+                    }
+                }
+                series = seriesObj;
+            }, samplingPeriod);
+        }
+    }
+
+    function stopInterval() {
+        if (intervalId !== null) {
+            clearInterval(intervalId);
+            intervalId = null;
+        }
+    }
+
+    $effect(() => {
+        if (!$sensorState) {
+            stopInterval();
+        } else {
+            startInterval();
+        }
+    });
 
     onMount(async () => {
-        sensor = await readSensor(sensorId);
-        signals = await readSignals(sensorId);
-        points = await getPoints(sensorId);
+        sensor = await readSensor($sensorId);
+        signals = await readSignals($sensorId);
+        points = await getPoints($sensorId);
 
-        let samplingPeriod = sensor.sampling_period * 1e3;
+        samplingPeriod = sensor.sampling_period * 1e3;
 
         if (points && Array.isArray(points)) {
             pointsObj = {};
@@ -80,31 +118,11 @@
             }
         }
 
-        interval = setInterval(async () => {
-            points = await getPoints(sensorId);
-
-            seriesObj = [];
-            if (points.length > 0) {
-                for (const point of points) {
-                    pointsObj[point.name].push([point.date_time, point.value]);
-                    if (pointsObj[point.name].length > numPoints) {
-                        pointsObj[point.name].shift();
-                    }
-                    seriesObj.push({
-                        name: point.name,
-                        type: "line",
-                        showSymbol: false,
-                        smooth: true,
-                        data: pointsObj[point.name],
-                    });
-                }
-            }
-            series = seriesObj;
-        }, samplingPeriod);
+        startInterval();
     });
 
     onDestroy(() => {
-        clearInterval(interval);
+        clearInterval(intervalId);
     });
 </script>
 
@@ -143,11 +161,7 @@
                 }}
             />
         </div>
-        <!-- {#await points then points} -->
-        <!-- <Chart {points} {numPoints} /> -->
-        <!-- <Chart series={seriesProp} /> -->
         <Chart {series} />
-        <!-- {/await} -->
     </main>
 </div>
 
@@ -163,15 +177,10 @@
         right: 0;
         height: 100%;
         width: 100%;
-        /* padding: 1.5rem; */
-
-        /* transform: translateX(0);
-        transition: transform 0.25s ease; */
         transition: width 0.25s ease;
     }
 
     .main.shifted {
-        /* transform: translateX(var(--w)); */
         width: calc(100% - var(--w));
     }
 
