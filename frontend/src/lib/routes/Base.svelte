@@ -140,27 +140,28 @@
         {/await}
     {/await}
 
+    <div class="overlay-btn">
+        <Button
+            kind="ghost"
+            iconDescription="Setpoints"
+            hideTooltip={true}
+            icon={offcanvas.icon}
+            onclick={() => {
+                offcanvas.opened = !offcanvas.opened;
+                if (offcanvas.opened) {
+                    offcanvas.icon = Close;
+                } else {
+                    offcanvas.icon = Menu;
+                }
+            }}
+        />
+    </div>
+
     <main
         class="main"
         style="--w:{offcanvas.width}vw"
         class:shifted={offcanvas.opened}
     >
-        <div class="overlay-btn">
-            <Button
-                kind="ghost"
-                iconDescription="Setpoints"
-                hideTooltip={true}
-                icon={offcanvas.icon}
-                onclick={() => {
-                    offcanvas.opened = !offcanvas.opened;
-                    if (offcanvas.opened) {
-                        offcanvas.icon = Close;
-                    } else {
-                        offcanvas.icon = Menu;
-                    }
-                }}
-            />
-        </div>
         <Chart {series} />
     </main>
 </div>

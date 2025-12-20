@@ -15,14 +15,17 @@
             animation: false,
 
             legend: {
-                top: 30,
+                type: "scroll",
+                orient: 'horizontal',
+                bottom: "bottom",
+                left: "center",
             },
 
             grid: {
                 left: 80,
                 right: 20,
-                top: 60,
-                bottom: 30,
+                top: 30,
+                bottom: 50,
                 containLabel: true,
             },
 

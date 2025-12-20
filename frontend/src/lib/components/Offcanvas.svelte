@@ -3,7 +3,7 @@
 	import { onMount, onDestroy } from "svelte";
 	let { sensor, signals, opened, width } = $props();
 
-	import { Button, Slider } from "carbon-components-svelte";
+	import { Button, Toggle, Slider } from "carbon-components-svelte";
 
 	import { user, sensorId, sensorState } from "../../utils/stores";
 	import api from "../../utils/api";
@@ -52,36 +52,33 @@
 		let res = await getSensorState($sensorId);
 		$sensorState = res.state;
 	});
-	onDestroy(() => {});
+
+	onDestroy(() => {
+		stopSensor(sensorId);
+	});
 </script>
 
 <aside class="offcanvas" style="--w:{width}vw" class:opened>
 	<nav>
-		<div style="all:revert">
-			{#if !$sensorState}
-				<Button
-					size="field"
-					kind="tertiary"
-					on:click={() => {
-						runSensor(sensor.id);
-						$sensorState = !$sensorState;
-					}}
-				>
-					Start
-				</Button>
-			{:else}
-				<Button
-					size="field"
-					kind="danger-tertiary"
-					on:click={() => {
-						stopSensor(sensor.id);
-						$sensorState = !$sensorState;
-					}}
-				>
-					Stop
-				</Button>
-			{/if}
+		<br />
+		<div style="margin-top: 12px;">
+			<h5>{sensor.name}</h5>
 		</div>
+		<Toggle
+			labelText="Sensor control"
+			hideLabel
+			size="sm"
+			toggled={$sensorState}
+			on:toggle={(e) => {
+				if (!$sensorState) {
+					runSensor(sensor.id);
+					$sensorState = true;
+				} else {
+					stopSensor(sensor.id);
+					$sensorState = false;
+				}
+			}}
+		/>
 		<br />
 		{#each signals as signal}
 			{#if signal.group == "input"}
@@ -117,6 +114,8 @@
 		border-right: solid;
 		border-color: #e8e8e8;
 		border-width: thin;
+
+		overflow: auto;
 	}
 
 	.offcanvas.opened {
@@ -128,5 +127,9 @@
 		flex-direction: column;
 		padding: 1.5rem;
 		gap: 1rem;
+	}
+
+	:root {
+		--cds-support-02: #0f62fe;
 	}
 </style>
