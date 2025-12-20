@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 import torch
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 
 from src import app, db, engine
 
@@ -76,7 +76,7 @@ class Sensor(db.Model):
                 clock_event.clear()
                 break
 
-    def receive(self, Signal, input_queue, clock_event):
+    def receive(self, Signal, input_queue, clock_event, kill_event):
 
         with app.app_context():
             signals = Signal.query.filter_by(sensor_id=self.id).order_by(
@@ -104,10 +104,10 @@ class Sensor(db.Model):
 
             input_queue.put(df_input)
 
-            if not self.state:
+            if kill_event.is_set():
                 break
 
-    def process(self, Signal, input_queue, output_queue, clock_event):
+    def process(self, Signal, input_queue, output_queue, clock_event, kill_event):
         repeater = torch.jit.load(self.model_path).to(device)
 
         with app.app_context():
@@ -173,10 +173,10 @@ class Sensor(db.Model):
                 df_output.index = pd.to_datetime(x_data.index)
                 output_queue.put(df_output)
 
-            if not self.state:
+            if kill_event.is_set():
                 break
 
-    def transmit(self, Signal, output_queue, clock_event):
+    def transmit(self, Signal, output_queue, clock_event, kill_event):
         engine = create_engine("sqlite:///../database/database.db")
         table = "data"
 
@@ -194,19 +194,22 @@ class Sensor(db.Model):
         )
         df_data.index.name = "date_time"
         df_data.to_sql(
-            table, con=engine, if_exists="replace", index=False, index_label="date_time"
+            table, con=engine, if_exists="replace", index=True, index_label="date_time"
         )
 
         while True:
             clock_event.wait()
             if len(output_queue.queue) > 0:
                 df_output = output_queue.get()
-                df_data = pd.concat([df_data, df_output], axis=0)
-                if len(df_data) > self.buffer:
-                    df_data = df_data.iloc[-self.buffer :]
-                df_data.to_sql(table, con=engine, if_exists="replace", index=True)
+                df_output.to_sql(table, con=engine, if_exists="append", index=True)
 
-            if not self.state:
+                query = text(
+                    f"""DELETE FROM {table} WHERE rowid NOT IN (SELECT rowid FROM {table} ORDER BY date_time DESC LIMIT :limit)"""
+                )
+                with engine.begin() as conn:
+                    conn.execute(query, {"limit": self.buffer})
+
+            if kill_event.is_set():
                 break
 
 
