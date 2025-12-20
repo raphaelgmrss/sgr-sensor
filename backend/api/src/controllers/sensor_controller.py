@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from sqlalchemy import create_engine
 
-from src import db, config
+from src import db
 from src.models.sensor_model import Sensor, SensorSchema
 from src.models.signal_model import Signal, SignalSchema
 
@@ -15,7 +15,7 @@ from src.models.signal_model import Signal, SignalSchema
 clock_event = threading.Event()
 kill_event = threading.Event()
 
-from datetime import datetime
+engine = create_engine("sqlite:///../database/database.db")
 
 
 def create():
@@ -205,6 +205,25 @@ def set_state(sensor_id, state):
         return jsonify(res), 500
 
 
+def set_values(sensor_id):
+    try:
+        signals = Signal.query.filter_by(sensor_id=sensor_id)
+        signals_schema = SignalSchema(many=True)
+
+        values = request.json["values"]
+
+        for index, signal in enumerate(signals):
+            signal.setpoint = values[index]["setpoint"]
+
+        db.session.commit()
+
+        res = {"status": "success", "data": signals_schema.dump(signals)}
+        return jsonify(res), 200
+    except Exception as err:
+        res = {"status": "error", "message": repr(err)}
+        return jsonify(res), 500
+
+
 def get_data(sensor_id, start_date, end_date):
     try:
         sensor = Sensor.query.get(sensor_id)
@@ -219,7 +238,6 @@ def get_data(sensor_id, start_date, end_date):
             elif signal.group == "output":
                 y_columns.append(column)
 
-        engine = create_engine("sqlite:///../database/database.db")
         query = """SELECT * FROM data WHERE date_time BETWEEN ? AND ? ORDER BY date_time ASC"""
 
         start_date = start_date.translate(str.maketrans({"T": " ", "Z": " "}))
@@ -270,24 +288,70 @@ def get_data(sensor_id, start_date, end_date):
 
         return jsonify(res), 200
     except Exception as err:
-        res = {"status": "fail", "message": (err)}
+        res = {"status": "fail", "message": repr(err)}
         return jsonify(res), 404
 
 
-def set_values(sensor_id):
+def get_points(sensor_id):
     try:
-        signals = Signal.query.filter_by(sensor_id=sensor_id)
-        signals_schema = SignalSchema(many=True)
+        sensor = Sensor.query.get(sensor_id)
+        signals = Signal.query.filter_by(sensor_id=sensor_id).order_by(Signal.id.asc())
 
-        values = request.json["values"]
+        x_columns = []
+        y_columns = []
+        for signal in signals:
+            column = "signal_{}".format(signal.id)
+            if signal.group == "input":
+                x_columns.append(column)
+            elif signal.group == "output":
+                y_columns.append(column)
 
-        for index, signal in enumerate(signals):
-            signal.setpoint = values[index]["setpoint"]
+        query = """SELECT * FROM data ORDER BY date_time DESC LIMIT 1"""
+        # query = """SELECT * FROM data ORDER BY date_time ASC"""
 
-        db.session.commit()
+        result = pd.read_sql(
+            query,
+            con=engine,
+            parse_dates=["date_time"],
+            index_col="date_time",
+        )
 
-        res = {"status": "success", "data": signals_schema.dump(signals)}
+        if not result.empty:
+            # date_time = (
+            #     pd.to_datetime(result.index.values)
+            #     .strftime("%Y-%m-%d %H:%M:%S")
+            #     .tolist()
+            # )
+
+            values = []
+            for signal in signals:
+                column = "signal_{}".format(signal.id)
+                values.append(
+                    {
+                        "id": signal.id,
+                        "name": signal.name,
+                        "description": signal.description,
+                        "date_time": pd.to_datetime(result.index.values)
+                        .strftime("%Y-%m-%dT%H:%M:%S")
+                        .tolist().pop(),
+                        "value": np.around(
+                            result[column].values,
+                            decimals=3,
+                        ).tolist().pop(),
+                    }
+                )
+
+                res = {
+                    "status": "success",
+                    "data": values,
+                }
+        else:
+            res = {
+                "status": "success",
+                "data": None,
+            }
+
         return jsonify(res), 200
     except Exception as err:
-        res = {"status": "error", "message": repr(err)}
-        return jsonify(res), 500
+        res = {"status": "fail", "message": repr(err)}
+        return jsonify(res), 404

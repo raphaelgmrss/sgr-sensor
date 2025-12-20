@@ -10,16 +10,19 @@
 
     import Navbar from "../components/Navbar.svelte";
     import Offcanvas from "../components/Offcanvas.svelte";
+    import Chart from "../components/Chart.svelte";
 
     import { user, sensorId } from "../../utils/stores";
     import api from "../../utils/api";
+    import { derived } from "svelte/store";
 
     let open = $state(false);
-    const WIDTH = 240;
 
     // Data
     let sensor = $state({});
     let signals = $state([]);
+    let points = $state([]);
+    let numPoints = 60;
 
     let offcanvas = $state({
         opened: false,
@@ -48,20 +51,66 @@
         }
     };
 
-    sensor = readSensor(sensorId);
-    signals = readSignals(sensorId);
+    const getPoints = async (id) => {
+        try {
+            const res = await api.get(`/sensor/${id}/points`);
+            // console.log(res.data);
+            return res.data;
+        } catch (error) {
+            console.log(error);
+        }
+    };
 
-    onMount(() => {
-        // sensor = readSensor(sensorId);
-        // signals = readSignals(sensorId);
+    let pointsObj = {};
+    let series = $state([]);
+    let seriesObj = [];
+    let interval = null;
+
+    onMount(async () => {
+        sensor = await readSensor(sensorId);
+        signals = await readSignals(sensorId);
+        points = await getPoints(sensorId);
+
+        let samplingPeriod = sensor.sampling_period * 1e3;
+
+        if (points && Array.isArray(points)) {
+            pointsObj = {};
+            for (const point of points) {
+                pointsObj[point.name] = [];
+            }
+        }
+
+        interval = setInterval(async () => {
+            points = await getPoints(sensorId);
+
+            seriesObj = [];
+            if (points.length > 0) {
+                for (const point of points) {
+                    pointsObj[point.name].push([point.date_time, point.value]);
+                    if (pointsObj[point.name].length > numPoints) {
+                        pointsObj[point.name].shift();
+                    }
+                    seriesObj.push({
+                        name: point.name,
+                        type: "line",
+                        showSymbol: false,
+                        smooth: true,
+                        data: pointsObj[point.name],
+                    });
+                }
+            }
+            series = seriesObj;
+        }, samplingPeriod);
     });
-    onDestroy(() => {});
+
+    onDestroy(() => {
+        clearInterval(interval);
+    });
 </script>
 
 <Navbar />
 
 <div class="layout">
-    <!-- <Offcanvas bind:open width={WIDTH} /> -->
     {#await sensor then sensor}
         {#await signals then signals}
             <Offcanvas
@@ -78,20 +127,27 @@
         style="--w:{offcanvas.width}vw"
         class:shifted={offcanvas.opened}
     >
-        <Button
-            kind="ghost"
-            iconDescription="Setpoints"
-            hideTooltip={true}
-            icon={offcanvas.icon}
-            onclick={() => {
-                offcanvas.opened = !offcanvas.opened;
-                if (offcanvas.opened) {
-                    offcanvas.icon = Close;
-                } else {
-                    offcanvas.icon = Menu;
-                }
-            }}
-        />
+        <div class="overlay-btn">
+            <Button
+                kind="ghost"
+                iconDescription="Setpoints"
+                hideTooltip={true}
+                icon={offcanvas.icon}
+                onclick={() => {
+                    offcanvas.opened = !offcanvas.opened;
+                    if (offcanvas.opened) {
+                        offcanvas.icon = Close;
+                    } else {
+                        offcanvas.icon = Menu;
+                    }
+                }}
+            />
+        </div>
+        <!-- {#await points then points} -->
+        <!-- <Chart {points} {numPoints} /> -->
+        <!-- <Chart series={seriesProp} /> -->
+        <Chart {series} />
+        <!-- {/await} -->
     </main>
 </div>
 
@@ -102,14 +158,27 @@
     }
 
     .main {
+        position: absolute;
+        top: 0;
+        right: 0;
         height: 100%;
-        padding: 1.5rem;
+        width: 100%;
+        /* padding: 1.5rem; */
 
-        transform: translateX(0);
-        transition: transform 0.25s ease;
+        /* transform: translateX(0);
+        transition: transform 0.25s ease; */
+        transition: width 0.25s ease;
     }
 
     .main.shifted {
-        transform: translateX(var(--w));
+        /* transform: translateX(var(--w)); */
+        width: calc(100% - var(--w));
+    }
+
+    .overlay-btn {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        z-index: 10;
     }
 </style>
