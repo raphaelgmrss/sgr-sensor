@@ -60,14 +60,16 @@
 
 <aside class="offcanvas" style="--w:{width}vw" class:opened>
 	<nav>
-		<br />
-		<div style="margin-top: 12px;">
-			<h5>{sensor.name}</h5>
+		<div>
+			{sensor.name}
 		</div>
+		<br />
 		<Toggle
 			labelText="Sensor control"
 			hideLabel
 			size="sm"
+			labelA={"OFF"}
+			labelB={"ON"}
 			toggled={$sensorState}
 			on:toggle={(e) => {
 				if (!$sensorState) {
@@ -88,6 +90,8 @@
 					max={signal.setpoint_max}
 					step={signal.setpoint_step}
 					value={signal.setpoint}
+					minLabel={"❭"}
+					maxLabel={" "}
 					fullWidth={true}
 					on:change={(e) => {
 						let setpoint = e.detail;
@@ -104,6 +108,7 @@
 		position: absolute;
 		top: 0;
 		left: 0;
+		padding-top: 50px;
 
 		width: var(--w);
 		height: 100%;

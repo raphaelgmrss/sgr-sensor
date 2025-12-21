@@ -340,7 +340,7 @@ def get_points(sensor_id):
                 values.append(
                     {
                         "id": signal.id,
-                        "name": signal.name,
+                        "name": "{} [{}]".format(signal.name, signal.unit),
                         "description": signal.description,
                         "records": np.column_stack(
                             [
