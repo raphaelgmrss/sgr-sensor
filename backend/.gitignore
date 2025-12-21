@@ -10,5 +10,6 @@ run.build/
 run.dist/
 run.onefile-build/
 build*/
+dist/
 # database/
 # models/
