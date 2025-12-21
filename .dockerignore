@@ -1,0 +1,10 @@
+**/__pycache__/
+**/*.py
+**/*.log
+node_modules/
+frontend/node_modules/
+frontend/.svelte-kit/
+.git
+.gitignore
+Dockerfile
+README.md

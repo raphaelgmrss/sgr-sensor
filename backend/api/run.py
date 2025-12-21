@@ -8,7 +8,7 @@ from src.controllers.sensor_controller import reset
 #     return protect()
 
 
-@app.route("/")
+@app.route("/api/")
 def index():
     return "<p>SGR Sensor</p>"
 
