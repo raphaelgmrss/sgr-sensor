@@ -1,17 +1,14 @@
 #!/usr/bin/env bash
 set -e
 
-python3 -m compileall ./api -b
+pyarmor gen \
+  --recursive \
+  --output dist \
+  ../api/
 
-mkdir -p ./dist/api
+python3 -m compileall ./dist/api -b
 
-rsync -av \
-  --include="*/" \
-  --include="*.pyc" \
-  --exclude="*" \
-  ./api/ ./dist/api/
-
-cp -r ./database ./dist
+cp -r ../database ./dist
 
 find ./dist/api -name "*.py" -delete
 
@@ -21,3 +18,5 @@ find ./dist/api -type d \( \
   -name "migrations" \
 \) -prune -exec rm -rf {} +
 
+mv ./dist/pyarmor_runtime_000000 ./dist/api/
+cp -r ../database ./dist

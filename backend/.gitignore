@@ -4,12 +4,12 @@ migrations/
 instance/
 node_modules/
 datasets/
-build/
+# build/
 libtorch/
 run.build/
 run.dist/
 run.onefile-build/
-build*/
-dist/
+# build*/
+# dist/
 # database/
 # models/
