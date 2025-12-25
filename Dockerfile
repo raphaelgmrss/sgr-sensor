@@ -3,8 +3,7 @@ FROM python:3.10-slim AS backend
 WORKDIR /app
 
 COPY backend/requirements.txt .
-COPY backend/dist/api ./api
-COPY backend/dist/database ./database
+COPY backend/build/dist .
 
 
 FROM node:20-alpine AS frontend

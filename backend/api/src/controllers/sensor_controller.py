@@ -140,6 +140,15 @@ def start(sensor_id):
         )
         transmit_thread.start()
 
+        clean_thread = threading.Thread(
+            target=sensor.clean,
+            args=(
+                clock_event,
+                kill_event,
+            ),
+        )
+        clean_thread.start()
+
         res = {"status": "success", "data": None}
         return jsonify(res), 202
     except Exception as err:

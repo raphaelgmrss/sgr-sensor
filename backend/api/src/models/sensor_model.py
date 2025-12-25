@@ -1,6 +1,8 @@
 import uuid
 from datetime import datetime
 import time
+import gc
+import ctypes
 
 from flask_marshmallow import Marshmallow
 import numpy as np
@@ -143,38 +145,38 @@ class Sensor(db.Model):
             np.expand_dims(np.zeros((repeater.lag, self.output_size)), axis=0)
         )
 
-        while True:
-            clock_event.wait()
-            if len(input_queue.queue) > 0:
+        with torch.inference_mode():
+            while True:
+                clock_event.wait()
+                if len(input_queue.queue) > 0:
+                    x_data = input_queue.get()
+                    x = pd.concat([x, x_data[x_columns]], join="outer", axis=0).iloc[
+                        -repeater.lag :, :
+                    ]
+                    x_scaled = x_scaler.transform(x.to_numpy())
+                    x_scaled = torch.FloatTensor(np.expand_dims(x_scaled, axis=0))
+                    z = repeater.forward(x_scaled, y_scaled)
+                    y_scaled = torch.cat(
+                        (y_scaled, torch.unsqueeze(z[:, -1, :], dim=0)), dim=1
+                    )[:, -repeater.lag :, :]
+                    y = y_scaler.inverse_transform(
+                        np.squeeze(y_scaled.cpu().detach().numpy(), axis=0)
+                    )
 
-                x_data = input_queue.get()
-                x = pd.concat([x, x_data[x_columns]], join="outer", axis=0).iloc[
-                    -repeater.lag :, :
-                ]
-                x_scaled = x_scaler.transform(x.to_numpy())
-                x_scaled = torch.FloatTensor(np.expand_dims(x_scaled, axis=0))
-                z = repeater.forward(x_scaled, y_scaled)
-                y_scaled = torch.cat(
-                    (y_scaled, torch.unsqueeze(z[:, -1, :], dim=0)), dim=1
-                )[:, -repeater.lag :, :]
-                y = y_scaler.inverse_transform(
-                    np.squeeze(y_scaled.cpu().detach().numpy(), axis=0)
-                )
+                    df_output = pd.DataFrame(
+                        np.hstack(
+                            (
+                                x_data.values[-1:, :],
+                                y[-1:, :],
+                            )
+                        ),
+                        columns=columns,
+                    )
+                    df_output.index = pd.to_datetime(x_data.index)
+                    output_queue.put(df_output)
 
-                df_output = pd.DataFrame(
-                    np.hstack(
-                        (
-                            x_data.values[-1:, :],
-                            y[-1:, :],
-                        )
-                    ),
-                    columns=columns,
-                )
-                df_output.index = pd.to_datetime(x_data.index)
-                output_queue.put(df_output)
-
-            if kill_event.is_set():
-                break
+                if kill_event.is_set():
+                    break
 
     def transmit(self, Signal, output_queue, clock_event, kill_event):
         engine = create_engine("sqlite:///../database/database.db")
@@ -210,6 +212,21 @@ class Sensor(db.Model):
                     conn.execute(query, {"limit": self.buffer})
 
             if kill_event.is_set():
+                break
+
+    def clean(self, clock_event, kill_event):
+        while True:
+            clock_event.wait()
+            gc.collect()
+
+            try:
+                ctypes.CDLL("libc.so.6").malloc_trim(0)
+            except:
+                pass
+
+            if kill_event.is_set():
+                clock_event.set()
+                clock_event.clear()
                 break
 
 
