@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -e
 
+rm -rf dist
+
 pyarmor gen \
   --recursive \
   --output dist \
@@ -20,3 +22,9 @@ find ./dist/api -type d \( \
 
 mv ./dist/pyarmor_runtime_000000 ./dist/api/
 cp -r ../database ./dist
+
+cd ../../
+
+docker stop sgr-sensor && docker rm sgr-sensor && docker rmi sgr-sensor
+docker build -t sgr-sensor .
+docker run -d --name sgr-sensor -p 8080:80 -p 5000:5000 sgr-sensor
