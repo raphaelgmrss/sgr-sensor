@@ -30,6 +30,9 @@ RUN apt-get update && \
     pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu --no-deps
 
+RUN ln -sf /usr/share/zoneinfo/America/Sao_Paulo /etc/timezone && \
+    ln -sf /usr/share/zoneinfo/America/Sao_Paulo /etc/localtime 
+
 COPY --from=frontend /frontend/dist /usr/share/nginx/html
 
 RUN rm -f /etc/nginx/sites-enabled/default
