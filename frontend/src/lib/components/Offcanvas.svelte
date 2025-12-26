@@ -137,4 +137,9 @@
 	:root {
 		--cds-support-02: #0f62fe;
 	}
+
+	:global(.bx--slider-text-input) {
+		font-size: 0.75rem;
+		flex: 0 0 auto;
+	}
 </style>
