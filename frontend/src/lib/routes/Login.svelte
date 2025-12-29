@@ -165,15 +165,15 @@
     {/if}
 
     <Tile light>
-        <!-- <div>
+        <div>
             <img class="logo" src={logo} alt="logo" />
-        </div> -->
+        </div>
 
-        <div style="margin-bottom: 2rem;">
+        <!-- <div style="margin-bottom: 2rem;">
             <h2 style="font-weight: bold; letter-spacing: 2px">
                 {platformName}
             </h2>
-        </div>
+        </div> -->
 
         <div class="form">
             <Form
@@ -277,10 +277,10 @@
     }
 
     .logo {
-        height: 128px;
-        margin-bottom: 32px;
+        height: 8rem;
+        /* margin-bottom: 32px;
         animation: rotate 5s linear infinite;
-        transform-origin: 50% 50%;
+        transform-origin: 50% 50%; */
     }
 
     @keyframes rotate {

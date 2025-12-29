@@ -3,8 +3,8 @@
 
   import { onMount, onDestroy } from "svelte";
 
-  import Base from "./lib/routes/Base.svelte";
   import Login from "./lib/routes/Login.svelte";
+  import Base from "./lib/routes/Base.svelte";
 
   import { user } from "./utils/stores";
 
@@ -14,9 +14,11 @@
   onDestroy(() => {});
 </script>
 
-<!-- {#if $user === null} -->
-{#if false}
+{#if $user === null}
   <Login />
 {:else}
   <Base />
 {/if}
+
+<style>
+</style>

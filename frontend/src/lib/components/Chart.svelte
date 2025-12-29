@@ -16,7 +16,7 @@
 
             legend: {
                 type: "scroll",
-                orient: 'horizontal',
+                orient: "horizontal",
                 bottom: "bottom",
                 left: "center",
             },
@@ -57,7 +57,10 @@
                 data: s.data.map((p) => [p[0], p[1]]),
             }));
 
-            chart.setOption({ series: safeSeries });
+            chart.setOption(
+                { series: safeSeries },
+                { replaceMerge: ["series"] },
+            );
         });
 
         onDestroy(() => {

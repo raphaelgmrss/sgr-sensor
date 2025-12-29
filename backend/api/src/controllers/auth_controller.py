@@ -83,7 +83,6 @@ def login():
                 "token": token,
                 "data": {
                     "id": user.id,
-                    "company_id": user.company_id,
                     "name": user.name,
                     "last_name": user.last_name,
                     "email": user.email,

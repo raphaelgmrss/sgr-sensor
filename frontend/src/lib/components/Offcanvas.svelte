@@ -1,15 +1,21 @@
 <script>
 	// @ts-nocheck
 	import { onMount, onDestroy } from "svelte";
-	let { sensor, signals, opened, width } = $props();
 
-	import { Button, Toggle, Slider } from "carbon-components-svelte";
+	import {
+		Button,
+		Toggle,
+		Slider,
+		Select,
+		SelectItem,
+	} from "carbon-components-svelte";
 
 	import { user, sensorId, sensorState } from "../../utils/stores";
 	import api from "../../utils/api";
 
+	let { sensors, sensor, signals, opened, width, selectSensor } = $props();
+
 	// Data
-	// let sensorState = $state();
 
 	const runSensor = async (id) => {
 		try {
@@ -23,6 +29,15 @@
 	const stopSensor = async (id) => {
 		try {
 			const res = await api.get(`/sensor/${id}/stop`);
+			return res.data;
+		} catch (error) {
+			console.log(error);
+		}
+	};
+
+	const resetSensors = async () => {
+		try {
+			const res = await api.get(`/sensor/reset`);
 			return res.data;
 		} catch (error) {
 			console.log(error);
@@ -49,57 +64,74 @@
 	};
 
 	onMount(async () => {
-		let res = await getSensorState($sensorId);
-		$sensorState = res.state;
+		if (typeof $sensorId === "number") {
+			let res = await getSensorState($sensorId);
+			$sensorState = res.state;
+		}
 	});
 
 	onDestroy(() => {
-		stopSensor(sensorId);
+		resetSensors();
 	});
 </script>
 
 <aside class="offcanvas" style="--w:{width}vw" class:opened>
 	<nav>
-		<div>
-			{sensor.name}
-		</div>
-		<br />
-		<Toggle
-			labelText="Sensor control"
-			hideLabel
-			size="sm"
-			labelA={"OFF"}
-			labelB={"ON"}
-			toggled={$sensorState}
-			on:toggle={(e) => {
-				if (!$sensorState) {
-					runSensor(sensor.id);
-					$sensorState = true;
-				} else {
-					stopSensor(sensor.id);
-					$sensorState = false;
-				}
+		<Select
+			labelText="Sensores"
+			noLabel={true}
+			bind:selected={$sensorId}
+			on:change={() => {
+				$sensorState = false;
+				resetSensors();
+				selectSensor();
 			}}
-		/>
+		>
+			<SelectItem />
+			{#each sensors as sensor}
+				<SelectItem value={sensor.id} text={sensor.name} />
+			{/each}
+		</Select>
 		<br />
-		{#each signals as signal}
-			{#if signal.group == "input"}
-				<Slider
-					labelText={`${signal.name} [${signal.unit}]`}
-					min={signal.setpoint_min}
-					max={signal.setpoint_max}
-					step={signal.setpoint_step}
-					value={signal.setpoint}
-					minLabel={"❭"}
-					maxLabel={" "}
-					fullWidth={true}
-					on:change={(e) => {
-						let setpoint = e.detail;
-						setSignalValue(signal.id, setpoint);
-					}}
-				/>
-			{/if}
-		{/each}
+
+		{#if typeof $sensorId === "number"}
+			<Toggle
+				labelText=""
+				hideLabel
+				size="sm"
+				labelA={"OFF"}
+				labelB={"ON"}
+				toggled={$sensorState}
+				on:toggle={(e) => {
+					if (!$sensorState) {
+						runSensor($sensorId);
+						$sensorState = true;
+					} else {
+						stopSensor($sensorId);
+						$sensorState = false;
+					}
+				}}
+			/>
+			<br />
+			{#each signals as signal}
+				{#if signal.group == "input"}
+					<Slider
+						labelText={`${signal.name} [${signal.unit}]`}
+						min={signal.setpoint_min}
+						max={signal.setpoint_max}
+						step={signal.setpoint_step}
+						value={signal.setpoint}
+						minLabel={"❭"}
+						maxLabel={" "}
+						fullWidth={true}
+						on:change={(e) => {
+							let setpoint = e.detail;
+							setSignalValue(signal.id, setpoint);
+						}}
+					/>
+				{/if}
+			{/each}
+		{/if}
 	</nav>
 </aside>
 

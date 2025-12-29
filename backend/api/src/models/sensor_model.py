@@ -180,7 +180,7 @@ class Sensor(db.Model):
 
     def transmit(self, Signal, output_queue, clock_event, kill_event):
         engine = create_engine("sqlite:///../database/database.db")
-        table = "data"
+        table = "data_{}".format(self.id)
 
         with app.app_context():
             signals = Signal.query.filter_by(sensor_id=self.id).order_by(

@@ -5,7 +5,7 @@ from queue import Queue
 from flask import request, jsonify
 import numpy as np
 import pandas as pd
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 
 from src import db
 from src.models.sensor_model import Sensor, SensorSchema
@@ -262,15 +262,18 @@ def get_data(sensor_id, start_date, end_date):
             elif signal.group == "output":
                 y_columns.append(column)
 
-        query = """SELECT * FROM data WHERE date_time BETWEEN ? AND ? ORDER BY date_time ASC"""
+        query = (
+            """SELECT * FROM ? WHERE date_time BETWEEN ? AND ? ORDER BY date_time ASC"""
+        )
 
+        table = "data_{}".format(sensor.id)
         start_date = start_date.translate(str.maketrans({"T": " ", "Z": " "}))
         end_date = end_date.translate(str.maketrans({"T": " ", "Z": " "}))
 
         result = pd.read_sql(
             query,
             con=engine,
-            params=(start_date, end_date),
+            params=(table, start_date, end_date),
             parse_dates=["date_time"],
             index_col="date_time",
         )
@@ -330,14 +333,26 @@ def get_points(sensor_id):
             elif signal.group == "output":
                 y_columns.append(column)
 
-        query = """SELECT * FROM (SELECT * FROM data ORDER BY date_time DESC LIMIT ?) AS recent_records ORDER BY date_time ASC;"""
-
+        table = "data_{}".format(sensor.id)
         limit = request.args.get("limit")
+
+        query = text(
+            f"""
+        SELECT *
+        FROM (
+            SELECT *
+            FROM {table}
+            ORDER BY date_time DESC
+            LIMIT :limit
+        ) AS recent_records
+        ORDER BY date_time ASC
+        """
+        )
 
         result = pd.read_sql(
             query,
             con=engine,
-            params=(limit,),
+            params={"limit": limit},
             parse_dates=["date_time"],
             index_col="date_time",
         )
@@ -374,5 +389,5 @@ def get_points(sensor_id):
 
         return jsonify(res), 200
     except Exception as err:
-        res = {"status": "fail", "message": repr(err)}
+        res = {"status": "fail", "message": (err)}
         return jsonify(res), 404
