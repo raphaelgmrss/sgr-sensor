@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { user } from './stores'
 
-const url = import.meta.env.API_URL || "http://127.0.0.1:5000/api";
+const url = window.__ENV__.API_URL || "http://127.0.0.1:5000/api";
 
 const checkResponseStatus = async (status) => {
     if (status == 'unauthorized') {

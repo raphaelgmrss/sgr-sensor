@@ -27,4 +27,4 @@ cd ../../
 
 docker stop sgr-sensor && docker rm sgr-sensor && docker rmi sgr-sensor
 docker build -t sgr-sensor .
-docker run -d --name sgr-sensor -p 8080:80 -p 5000:5000 sgr-sensor
+docker run -d --name sgr-sensor -p 8080:80 -e API_URL=http://localhost:8080/api sgr-sensor

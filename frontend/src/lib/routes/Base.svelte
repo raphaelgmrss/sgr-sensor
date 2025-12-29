@@ -3,12 +3,14 @@
 
     import { onMount, onDestroy } from "svelte";
 
-    import { Button } from "carbon-components-svelte";
+    import { Button, Modal } from "carbon-components-svelte";
+
     import User from "carbon-icons-svelte/lib/User.svelte";
     import Menu from "carbon-icons-svelte/lib/Menu.svelte";
     import Close from "carbon-icons-svelte/lib/Close.svelte";
 
     import Navbar from "../components/Navbar.svelte";
+    import Profile from "../components/Profile.svelte";
     import Offcanvas from "../components/Offcanvas.svelte";
     import Chart from "../components/Chart.svelte";
 
@@ -19,6 +21,7 @@
     let open = $state(false);
 
     // Data
+    let sensors = $state([]);
     let sensor = $state({});
     let signals = $state([]);
     let points = $state([]);
@@ -36,7 +39,21 @@
         width: 25,
     });
 
+    let profile = $state({
+        modal: false,
+    });
+
     // Callbacks
+    const readSensors = async (id) => {
+        try {
+            const res = await api.get(`/sensor`);
+            // console.log(res.data);
+            return res.data;
+        } catch (error) {
+            console.log(error);
+        }
+    };
+
     const readSensor = async (id) => {
         try {
             const res = await api.get(`/sensor/${id}`);
@@ -96,6 +113,20 @@
         }
     }
 
+    const selectSensor = async () => {
+        stopInterval();
+        series = [];
+        if (typeof $sensorId === "number") {
+            sensor = await readSensor($sensorId);
+            signals = await readSignals($sensorId);
+            points = await getPoints($sensorId);
+
+            samplingPeriod = sensor.sampling_period * 1e3;
+
+            startInterval();
+        }
+    };
+
     $effect(() => {
         if (!$sensorState) {
             stopInterval();
@@ -105,35 +136,25 @@
     });
 
     onMount(async () => {
-        sensor = await readSensor($sensorId);
-        signals = await readSignals($sensorId);
-        points = await getPoints($sensorId);
-
-        samplingPeriod = sensor.sampling_period * 1e3;
-
-        if (points && Array.isArray(points)) {
-            pointsObj = {};
-            for (const point of points) {
-                pointsObj[point.name] = [];
-            }
-        }
-
-        startInterval();
+        sensors = await readSensors();
     });
 
     onDestroy(() => {
-        clearInterval(intervalId);
+        if (intervalId !== null) {
+            clearInterval(intervalId);
+        }
     });
 </script>
 
-<Navbar />
+<Navbar bind:profile={profile.modal} />
 
 <div class="layout">
     {#await sensor then sensor}
         {#await signals then signals}
             <Offcanvas
-                {sensor}
+                {sensors}
                 {signals}
+                {selectSensor}
                 bind:opened={offcanvas.opened}
                 width={offcanvas.width}
             />
@@ -162,9 +183,14 @@
         style="--w:{offcanvas.width}vw"
         class:shifted={offcanvas.opened}
     >
-        <Chart {series} />
+        {#key $sensorId}
+            <Chart {series} />
+        {/key}
     </main>
 </div>
+
+<!-- Profile Modal -->
+<Profile bind:opened={profile.modal} />
 
 <style>
     .layout {

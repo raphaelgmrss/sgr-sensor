@@ -34,6 +34,7 @@ RUN ln -sf /usr/share/zoneinfo/America/Sao_Paulo /etc/timezone && \
     ln -sf /usr/share/zoneinfo/America/Sao_Paulo /etc/localtime 
 
 COPY --from=frontend /frontend/dist /usr/share/nginx/html
+COPY frontend/public/env.js /usr/share/nginx/html/env.js
 
 RUN rm -f /etc/nginx/sites-enabled/default
 COPY nginx.conf /etc/nginx/sites-enabled/default
