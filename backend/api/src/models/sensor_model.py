@@ -67,18 +67,22 @@ class Sensor(db.Model):
 
         return columns, x_columns, y_columns
 
-    def clock(self, clock_event, kill_event):
-        while True:
-            clock_event.set()
-            clock_event.clear()
-            time.sleep(self.sampling_period)
 
-            if kill_event.is_set():
-                clock_event.set()
-                clock_event.clear()
-                break
+    def clock(self, tick_event, stop_event):
+        next_tick = time.monotonic()
 
-    def receive(self, Signal, input_queue, clock_event, kill_event):
+        while not stop_event.is_set():
+            next_tick += self.sampling_period
+
+            sleep_time = next_tick - time.monotonic()
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+
+            tick_event.set()
+            tick_event.clear()
+
+
+    def receive(self, Signal, input_queue, tick_event, stop_event):
 
         with app.app_context():
             signals = Signal.query.filter_by(sensor_id=self.id).order_by(
@@ -86,8 +90,8 @@ class Sensor(db.Model):
             )
             _, x_columns, _ = self.get_fields(signals)
 
-        while True:
-            clock_event.wait()
+        while not stop_event.is_set():
+            tick_event.wait()
 
             data = [datetime.now().isoformat()]
             with app.app_context():
@@ -106,10 +110,8 @@ class Sensor(db.Model):
 
             input_queue.put(df_input)
 
-            if kill_event.is_set():
-                break
 
-    def process(self, Signal, input_queue, output_queue, clock_event, kill_event):
+    def process(self, Signal, input_queue, output_queue, tick_event, stop_event):
         repeater = torch.jit.load(self.model_path).to(device)
 
         with app.app_context():
@@ -146,8 +148,8 @@ class Sensor(db.Model):
         )
 
         with torch.inference_mode():
-            while True:
-                clock_event.wait()
+            while not stop_event.is_set():
+                tick_event.wait()
                 if len(input_queue.queue) > 0:
                     x_data = input_queue.get()
                     x = pd.concat([x, x_data[x_columns]], join="outer", axis=0).iloc[
@@ -175,10 +177,8 @@ class Sensor(db.Model):
                     df_output.index = pd.to_datetime(x_data.index)
                     output_queue.put(df_output)
 
-                if kill_event.is_set():
-                    break
 
-    def transmit(self, Signal, output_queue, clock_event, kill_event):
+    def transmit(self, Signal, output_queue, tick_event, stop_event):
         engine = create_engine("sqlite:///../database/database.db")
         table = "data_{}".format(self.id)
 
@@ -199,8 +199,8 @@ class Sensor(db.Model):
             table, con=engine, if_exists="replace", index=True, index_label="date_time"
         )
 
-        while True:
-            clock_event.wait()
+        while not stop_event.is_set():
+            tick_event.wait()
             if len(output_queue.queue) > 0:
                 df_output = output_queue.get()
                 df_output.to_sql(table, con=engine, if_exists="append", index=True)
@@ -211,23 +211,16 @@ class Sensor(db.Model):
                 with engine.begin() as conn:
                     conn.execute(query, {"limit": self.buffer})
 
-            if kill_event.is_set():
-                break
 
-    def clean(self, clock_event, kill_event):
-        while True:
-            clock_event.wait()
+    def clean(self, tick_event, stop_event):
+        while not stop_event.is_set():
+            tick_event.wait()
             gc.collect()
 
             try:
                 ctypes.CDLL("libc.so.6").malloc_trim(0)
             except:
                 pass
-
-            if kill_event.is_set():
-                clock_event.set()
-                clock_event.clear()
-                break
 
 
 class SensorSchema(ma.SQLAlchemySchema):

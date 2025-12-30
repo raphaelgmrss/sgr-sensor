@@ -14,9 +14,15 @@
     import Offcanvas from "../components/Offcanvas.svelte";
     import Chart from "../components/Chart.svelte";
 
-    import { user, sensorId, sensorState } from "../../utils/stores";
+    import {
+        user,
+        sensorId,
+        sensorState,
+        samplingPeriod,
+        limit,
+        norm,
+    } from "../../utils/stores";
     import api from "../../utils/api";
-    import { derived } from "svelte/store";
 
     let open = $state(false);
 
@@ -25,8 +31,6 @@
     let sensor = $state({});
     let signals = $state([]);
     let points = $state([]);
-    let samplingPeriod = 1000;
-    let limit = 60;
 
     let pointsObj = {};
     let series = $state([]);
@@ -76,7 +80,9 @@
 
     const getPoints = async (id) => {
         try {
-            const res = await api.get(`/sensor/${id}/points?limit=${limit}`);
+            const res = await api.get(
+                `/sensor/${id}/points?limit=${$limit}&norm=${$norm}`,
+            );
             // console.log(res.data);
             return res.data;
         } catch (error) {
@@ -102,7 +108,7 @@
                     }
                 }
                 series = seriesObj;
-            }, samplingPeriod);
+            }, $samplingPeriod);
         }
     }
 
@@ -121,9 +127,7 @@
             signals = await readSignals($sensorId);
             points = await getPoints($sensorId);
 
-            samplingPeriod = sensor.sampling_period * 1e3;
-
-            startInterval();
+            $samplingPeriod = sensor.sampling_period * 1e3;
         }
     };
 
@@ -140,9 +144,7 @@
     });
 
     onDestroy(() => {
-        if (intervalId !== null) {
-            clearInterval(intervalId);
-        }
+        stopInterval();
     });
 </script>
 

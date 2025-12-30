@@ -2,18 +2,19 @@ import time
 import threading
 from queue import Queue
 
-from flask import request, jsonify
 import numpy as np
 import pandas as pd
+from flask import request, jsonify
 from sqlalchemy import create_engine, text
+from sklearn.preprocessing import MinMaxScaler
 
 from src import db
 from src.models.sensor_model import Sensor, SensorSchema
 from src.models.signal_model import Signal, SignalSchema
 
 
-clock_event = threading.Event()
-kill_event = threading.Event()
+tick_event = threading.Event()
+stop_event = threading.Event()
 
 engine = create_engine("sqlite:///../database/database.db")
 
@@ -116,35 +117,35 @@ def start(sensor_id):
         clock_thread = threading.Thread(
             target=sensor.clock,
             args=(
-                clock_event,
-                kill_event,
+                tick_event,
+                stop_event,
             ),
         )
         clock_thread.start()
 
         receive_thread = threading.Thread(
             target=sensor.receive,
-            args=(Signal, input_queue, clock_event, kill_event),
+            args=(Signal, input_queue, tick_event, stop_event),
         )
         receive_thread.start()
 
         process_thread = threading.Thread(
             target=sensor.process,
-            args=(Signal, input_queue, output_queue, clock_event, kill_event),
+            args=(Signal, input_queue, output_queue, tick_event, stop_event),
         )
         process_thread.start()
 
         transmit_thread = threading.Thread(
             target=sensor.transmit,
-            args=(Signal, output_queue, clock_event, kill_event),
+            args=(Signal, output_queue, tick_event, stop_event),
         )
         transmit_thread.start()
 
         clean_thread = threading.Thread(
             target=sensor.clean,
             args=(
-                clock_event,
-                kill_event,
+                tick_event,
+                stop_event,
             ),
         )
         clean_thread.start()
@@ -163,9 +164,9 @@ def stop(sensor_id):
         sensor.state = False
         db.session.commit()
 
-        kill_event.set()
+        stop_event.set()
         time.sleep(1)
-        kill_event.clear()
+        stop_event.clear()
 
         res = {"status": "success", "data": None}
         return jsonify(res), 200
@@ -182,9 +183,9 @@ def reset():
             sensor.state = False
         db.session.commit()
 
-        kill_event.set()
+        stop_event.set()
         time.sleep(1)
-        kill_event.clear()
+        stop_event.clear()
 
         res = {"status": "success", "data": None}
         return jsonify(res), 200
@@ -356,6 +357,21 @@ def get_points(sensor_id):
             parse_dates=["date_time"],
             index_col="date_time",
         )
+
+        norm = request.args.get("norm")
+        if norm == None:
+            norm = False
+        elif norm == "true":
+            norm = True
+        elif norm == "false":
+            norm = False
+
+
+        if norm:
+            scaler = MinMaxScaler(feature_range=(0, 1))
+            result_scaled = scaler.fit_transform(result)
+            result[result.columns[:]] = result_scaled
+
 
         if not result.empty:
             values = []
