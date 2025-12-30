@@ -112,11 +112,12 @@
 					} else {
 						stopSensor($sensorId);
 						$sensorState = false;
+						$norm = false;
 					}
 				}}
 			/>
 			<br />
-			<p>Setpoints</p>
+			<p class:disabled={!$sensorState}>Setpoints</p>
 			<Checkbox
 				labelText="Normalize"
 				bind:checked={$norm}
@@ -183,5 +184,9 @@
 	:global(.bx--slider-text-input) {
 		font-size: 0.75rem;
 		flex: 0 0 auto;
+	}
+
+	.disabled {
+		color: #c6c6c6;
 	}
 </style>
