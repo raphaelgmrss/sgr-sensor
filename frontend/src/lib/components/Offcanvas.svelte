@@ -8,9 +8,10 @@
 		Slider,
 		Select,
 		SelectItem,
+		Checkbox,
 	} from "carbon-components-svelte";
 
-	import { user, sensorId, sensorState } from "../../utils/stores";
+	import { user, sensorId, sensorState, norm } from "../../utils/stores";
 	import api from "../../utils/api";
 
 	let { sensors, sensor, signals, opened, width, selectSensor } = $props();
@@ -71,18 +72,21 @@
 	});
 
 	onDestroy(() => {
+		$sensorId = undefined;
 		resetSensors();
 	});
 </script>
 
 <aside class="offcanvas" style="--w:{width}vw" class:opened>
 	<nav>
+		<p>Sensor</p>
 		<Select
 			labelText="Sensores"
 			noLabel={true}
 			bind:selected={$sensorId}
 			on:change={() => {
 				$sensorState = false;
+				$norm = false;
 				resetSensors();
 				selectSensor();
 			}}
@@ -92,7 +96,6 @@
 				<SelectItem value={sensor.id} text={sensor.name} />
 			{/each}
 		</Select>
-		<br />
 
 		{#if typeof $sensorId === "number"}
 			<Toggle
@@ -113,6 +116,12 @@
 				}}
 			/>
 			<br />
+			<p>Setpoints</p>
+			<Checkbox
+				labelText="Normalize"
+				bind:checked={$norm}
+				disabled={!$sensorState}
+			/>
 			{#each signals as signal}
 				{#if signal.group == "input"}
 					<Slider
@@ -124,6 +133,7 @@
 						minLabel={"❭"}
 						maxLabel={" "}
 						fullWidth={true}
+						disabled={!$sensorState}
 						on:change={(e) => {
 							let setpoint = e.detail;
 							setSignalValue(signal.id, setpoint);
